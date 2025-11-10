@@ -1,107 +1,88 @@
-// Sprites + fireworks (no click spawning) + overlay reveal button
 (() => {
-  const stage = document.getElementById('stage');
-  const canvas = document.getElementById('fw');
-  const ctx = canvas.getContext('2d', { alpha: true });
-  let W, H, dpr;
-  function resize(){
-    dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-    W = canvas.width = Math.floor(innerWidth * dpr);
-    H = canvas.height = Math.floor(innerHeight * dpr);
-    canvas.style.width = innerWidth + 'px';
-    canvas.style.height = innerHeight + 'px';
-  }
-  addEventListener('resize', resize);
-  resize();
+const stage=document.getElementById('stage');
+const canvas=document.createElement('canvas');
+canvas.id='fw';
+document.body.appendChild(canvas);
+const ctx=canvas.getContext('2d',{alpha:true});
+const bgm=document.getElementById('bgm');
+const sfx=document.getElementById('sfxFail');
 
-  // --- Sprites setup ---
-  const sprites = Array.from(document.querySelectorAll('.sprite')).map(img => {
-    const size = parseFloat(img.dataset.size || '0.25'); // fraction of viewport width
-    const base = Math.min(innerWidth, innerHeight);
-    const w = Math.max(60, Math.round(base * size));
-    img.style.width = w + 'px';
-    // random start
-    const x = Math.random() * (innerWidth - w);
-    const y = Math.random() * (innerHeight - w);
-    const speed = 60 + Math.random() * 120; // px/s
-    const angle = Math.random() * Math.PI * 2;
-    return { el: img, w, h: w, x, y, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed };
+function resize(){
+  canvas.width=innerWidth;canvas.height=innerHeight;
+}
+resize();addEventListener('resize',resize);
+
+bgm.play().catch(()=>{addEventListener('pointerdown',()=>bgm.play(),{once:true});});
+
+// Setup sprites
+const sprites=Array.from(document.querySelectorAll('.sprite')).map(el=>{
+  const size=parseFloat(el.dataset.size||'0.2')*Math.min(innerWidth,innerHeight);
+  el.style.width=size+'px';
+  return {el,x:Math.random()*(innerWidth-size),y:Math.random()*(innerHeight-size),vx:80-160*Math.random(),vy:80-160*Math.random(),w:size,h:size};
+});
+
+let last = performance.now();
+function step(t){
+  const dt = (t - last) / 1000;
+  last = t;
+  sprites.forEach(s => {
+    s.x += s.vx * dt;
+    s.y += s.vy * dt;
+    if (s.x <= 0){ s.x = 0; s.vx *= -1; }
+    if (s.y <= 0){ s.y = 0; s.vy *= -1; }
+    if (s.x + s.w >= innerWidth){ s.x = innerWidth - s.w; s.vx *= -1; }
+    if (s.y + s.h >= innerHeight){ s.y = innerHeight - s.h; s.vy *= -1; }
+    s.el.style.transform = `translate(${s.x}px, ${s.y}px)`;
   });
-
-  let last = performance.now();
-  function step(t){
-    const dt = (t - last) / 1000;
-    last = t;
-
-    // Move sprites
-    sprites.forEach(s => {
-      s.x += s.vx * dt;
-      s.y += s.vy * dt;
-      // bounce off edges
-      if (s.x <= 0){ s.x = 0; s.vx *= -1; }
-      if (s.y <= 0){ s.y = 0; s.vy *= -1; }
-      if (s.x + s.w >= innerWidth){ s.x = innerWidth - s.w; s.vx *= -1; }
-      if (s.y + s.h >= innerHeight){ s.y = innerHeight - s.h; s.vy *= -1; }
-      s.el.style.transform = `translate(${s.x}px, ${s.y}px)`;
-    });
-
-    // Fireworks animation
-    renderFireworks(dt);
-
-    requestAnimationFrame(step);
-  }
   requestAnimationFrame(step);
+}
+requestAnimationFrame(step);
 
-  // --- Pixel Fireworks (canvas) ---
-  const fireworks = [];
-  function spawnFirework(x = Math.random() * W, y = Math.random() * H * 0.7 + H*0.15){
-    const count = 32 + (Math.random()*32|0);
-    const speed = 60 + Math.random() * 120;
-    const size = (2 + Math.random()*2)|0; // pixel size
-    const hue = Math.random()*360|0;
-    const parts = [];
-    for (let i=0;i<count;i++){
-      const a = Math.random()*Math.PI*2;
-      const v = speed*(.5 + Math.random());
-      parts.push({ x, y, vx: Math.cos(a)*v, vy: Math.sin(a)*v, life: 1, size, hue: (hue + (i*8))%360 });
-    }
-    fireworks.push({ parts });
-  }
 
-  let fwTimer = 0;
-  function renderFireworks(dt){
-    fwTimer += dt;
-    if (fwTimer > 0.8){ // auto-spawn only (no click handler)
-      fwTimer = 0;
-      spawnFirework();
-    }
-    ctx.fillStyle = 'rgba(11,11,18,0.22)';
-    ctx.fillRect(0,0,W,H);
+// Fireworks dummy fade bg
+function fire(){
+  ctx.fillStyle='rgba(11,11,18,0.22)';ctx.fillRect(0,0,canvas.width,canvas.height);
+  requestAnimationFrame(fire);
+}
+fire();
 
-    const g = 120; // gravity
-    fireworks.forEach(fw => {
-      fw.parts.forEach(p => {
-        p.vy += g*dt;
-        p.x += p.vx*dt*dpr;
-        p.y += p.vy*dt*dpr;
-        p.life -= dt * (0.6 + Math.random()*0.4);
-        const alpha = Math.max(0,p.life);
-        ctx.fillStyle = `hsla(${p.hue} 100% 65% / ${alpha})`;
-        const s = p.size * dpr;
-        ctx.fillRect(p.x|0, p.y|0, s, s);
-      });
-    });
-    for (let i=fireworks.length-1; i>=0; i--){
-      if (fireworks[i].parts.every(p => p.life <= 0)){
-        fireworks.splice(i,1);
-      }
-    }
-  }
+// Messages
+const schopenhauer=[
+  "Talent hits a target no one else can hit; genius hits a target no one else can see.",
+  "Compassion is the basis of morality.",
+  "A man can be himself only so long as he is alone.",
+  "We forfeit three-fourths of ourselves in order to be like other people.",
+  "The person who writes for fools is always sure of a large audience."
+];
+let fishStep=0;
+function fishMsg(){
+  fishStep=(fishStep+1)%3;
+  return ["BLEY","BLEEEYYY","BLEYYYYYYYYYYYYYYYY"][fishStep];
+}
+function rand(arr){return arr[Math.floor(Math.random()*arr.length)];}
 
-  // --- Reveal overlay button ---
-  const btn = document.getElementById('revolution');
-  const overlay = document.getElementById('overlay');
-  btn.addEventListener('click', () => {
-    overlay.classList.add('active');
+const msgs={
+  Fish:()=>fishMsg(),
+  Frog:()=>"I'm just a frog",
+  Person:()=>rand(schopenhauer)
+};
+
+sprites.forEach(s=>{
+  s.el.addEventListener('click',()=>{
+    const text=msgs[s.el.alt]?msgs[s.el.alt]():"";
+    const div=document.createElement('div');
+    div.className='speech';
+    div.textContent=text;
+    div.style.left=s.x+s.w/2+'px';
+    div.style.top=s.y-10+'px';
+    stage.appendChild(div);
+    setTimeout(()=>div.remove(),1500);
   });
+});
+
+// Revolution button
+document.getElementById('revolution').addEventListener('click',()=>{
+  document.getElementById('overlay').classList.add('active');
+  sfx.play().catch(()=>{});
+});
 })();
